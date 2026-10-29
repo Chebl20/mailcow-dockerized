@@ -64,17 +64,38 @@ ensure_sogo_custom_assets() {
   fi
 }
 
-ensure_snake_oil_certs() {
-  if [ ! -f data/assets/ssl/cert.pem ] || [ ! -f data/assets/ssl/key.pem ]; then
-    echo "Generating initial snake-oil TLS material for ${MAILCOW_HOSTNAME}..."
+ensure_snake_oil_certs_in() {
+  local base="$1"
+  local bootstrap="${ROOT}/deploy/tls-bootstrap"
+  [ -d "$base" ] || return 0
+  mkdir -p "${base}/data/assets/ssl" "${base}/data/assets/ssl-example"
+  if [ -f "${base}/data/assets/ssl/cert.pem" ] && [ -f "${base}/data/assets/ssl/key.pem" ]; then
+    return 0
+  fi
+  if command -v openssl >/dev/null 2>&1; then
+    echo "Generating initial snake-oil TLS material for ${MAILCOW_HOSTNAME} in ${base}..."
     openssl req -x509 -newkey rsa:4096 \
-      -keyout data/assets/ssl-example/key.pem \
-      -out data/assets/ssl-example/cert.pem \
+      -keyout "${base}/data/assets/ssl-example/key.pem" \
+      -out "${base}/data/assets/ssl-example/cert.pem" \
       -days 365 \
       -subj "/C=BR/O=Sowtech/CN=${MAILCOW_HOSTNAME}" \
       -sha256 -nodes 2>/dev/null
-    cp -n data/assets/ssl-example/*.pem data/assets/ssl/ 2>/dev/null || \
-      cp data/assets/ssl-example/*.pem data/assets/ssl/
+  elif [ -f "${bootstrap}/cert.pem" ] && [ -f "${bootstrap}/key.pem" ]; then
+    echo "openssl not available in deploy container; using bundled bootstrap certs in ${base}..."
+    cp "${bootstrap}/cert.pem" "${base}/data/assets/ssl-example/cert.pem"
+    cp "${bootstrap}/key.pem" "${base}/data/assets/ssl-example/key.pem"
+  else
+    echo "ERROR: missing openssl and deploy/tls-bootstrap/*.pem" >&2
+    exit 1
+  fi
+  cp -n "${base}/data/assets/ssl-example/"*.pem "${base}/data/assets/ssl/" 2>/dev/null || \
+    cp "${base}/data/assets/ssl-example/"*.pem "${base}/data/assets/ssl/"
+}
+
+ensure_snake_oil_certs() {
+  ensure_snake_oil_certs_in "$WORK_ROOT"
+  if [ "$ROOT" != "$WORK_ROOT" ]; then
+    ensure_snake_oil_certs_in "$ROOT"
   fi
 }
 
