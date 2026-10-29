@@ -38,6 +38,8 @@ A big thank you to everyone supporting us on GitHub Sponsors—your contribution
 
 Please see [the official documentation](https://docs.mailcow.email/) for installation and support instructions. 🐄
 
+For deploying this fork on **Coolify** (hostname `mail.sowtech.io`), see [deploy/COOLIFY.md](deploy/COOLIFY.md).
+
 🐛 **If you found a critical security issue, please mail us to [info at servercow.de](mailto:info@servercow.de).**
 
 ## Cowmunity
