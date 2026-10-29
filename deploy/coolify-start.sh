@@ -7,7 +7,11 @@ cd "$ROOT"
 
 bash deploy/coolify-ensure-config.sh
 
-COMPOSE=(docker compose --env-file mailcow.conf)
+# Prefer mailcow.conf; .env is a copy for Coolify's injected compose step.
+ENV_FILE=mailcow.conf
+[ -f mailcow.conf ] || ENV_FILE=.env
+
+COMPOSE=(docker compose --env-file "$ENV_FILE")
 if [ "${DOCKER_COMPOSE_VERSION:-native}" = "standalone" ]; then
   COMPOSE=(docker-compose --env-file mailcow.conf)
 fi

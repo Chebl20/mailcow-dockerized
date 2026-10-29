@@ -23,6 +23,24 @@ ensure_placeholder_files() {
     echo '# Placeholder' > ./data/conf/rspamd/override.d/worker-controller-password.inc
 }
 
+# SOGo bind-mounts expect files; if missing, Docker creates directories and the stack fails.
+ensure_sogo_custom_assets() {
+  local defaults="${ROOT}/deploy/sogo-defaults"
+  local names=(custom-shortlogo.svg custom-fulllogo.svg custom-fulllogo.png)
+  mkdir -p data/conf/sogo
+  for name in "${names[@]}"; do
+    local dest="data/conf/sogo/${name}"
+    if [ -d "$dest" ]; then
+      echo "Removing mistaken directory ${dest} (SOGo needs a file mount)..."
+      rm -rf "$dest"
+    fi
+    if [ ! -f "$dest" ] && [ -f "${defaults}/${name}" ]; then
+      cp "${defaults}/${name}" "$dest"
+      echo "Installed SOGo asset ${name}"
+    fi
+  done
+}
+
 ensure_snake_oil_certs() {
   if [ ! -f data/assets/ssl/cert.pem ] || [ ! -f data/assets/ssl/key.pem ]; then
     echo "Generating initial snake-oil TLS material for ${MAILCOW_HOSTNAME}..."
@@ -157,8 +175,14 @@ else
 fi
 
 ensure_placeholder_files
+ensure_sogo_custom_assets
 ensure_snake_oil_certs
 write_app_info
+
+# Coolify default compose uses .env in artifacts — mirror mailcow.conf when present.
+if [ -f mailcow.conf ]; then
+  cp -f mailcow.conf .env
+fi
 
 # Optional: apply non-secret overrides from Coolify env on every deploy
 if [ -f mailcow.conf ] && [ "${COOLIFY_SYNC_HOSTNAME:-y}" = "y" ] && [ -n "${MAILCOW_HOSTNAME}" ]; then

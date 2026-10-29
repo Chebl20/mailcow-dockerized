@@ -18,15 +18,51 @@ Branch: **master** (não `main`)
 4. **Docker Compose Location**: `docker-compose.yml`.
 5. **Advanced → Docker compose → Compose deployment**: preferir **Raw (deploy file as-is)**  
    O mailcow publica portas de e-mail no host; o proxy HTTP do Coolify não substitui SMTP/IMAP.
-6. **Custom Start Command** (substitui o `up` padrão):
+6. **Custom Build Command** (roda antes do compose — obrigatório se o Coolify usar o `.env` dele):
+
+   ```bash
+   bash deploy/coolify-ensure-config.sh
+   ```
+
+7. **Custom Start Command** (substitui o `up` padrão):
 
    ```bash
    bash deploy/coolify-start.sh
    ```
 
-7. **Environment**: copie de `deploy/coolify.env.example`. Defina segredos no Coolify como **Secret**; não commite `mailcow.conf`.
-8. **Persistent storage**: monte o diretório de deploy (ou pelo menos `data/` + `mailcow.conf`) para sobreviver a redeploys Git.
-9. **Deploy** e acompanhe os logs.
+   Se o log mostrar `docker compose --env-file .../artifacts/.../.env` **sem** `mailcow.conf`, o Coolify **não** está usando estes comandos — corrija em **Advanced**.
+
+8. **Environment**: copie de `deploy/coolify.env.example`. Defina segredos no Coolify como **Secret**; não commite `mailcow.conf`.
+9. **Persistent storage**: monte o diretório de deploy (ou pelo menos `data/` + `mailcow.conf`) para sobreviver a redeploys Git.
+10. **Deploy** e acompanhe os logs.
+
+### Erro SOGo `custom-shortlogo.svg` / "not a directory"
+
+O compose monta **arquivos** em `data/conf/sogo/custom-*.svg`. No Git eles não existem (`.gitignore`). Se faltarem, o Docker cria **pastas** com esse nome e o SOGo não sobe.
+
+**Correção na VPS** (uma vez), depois redeploy com o script atualizado:
+
+```bash
+cd /data/coolify/applications/SEU_UUID
+rm -rf data/conf/sogo/custom-shortlogo.svg data/conf/sogo/custom-fulllogo.svg data/conf/sogo/custom-fulllogo.png
+bash deploy/coolify-ensure-config.sh
+```
+
+### Avisos `DBPASS` / `DBUSER` "is not set"
+
+O Coolify subiu o compose com `.env` vazio. Use **Custom Build** + **Custom Start** acima, ou preencha no Environment: `DBNAME`, `DBUSER`, `DBPASS`, `DBROOT`, `REDISPASS`, `MAILCOW_HOSTNAME`, `TZ`, `ADDITIONAL_SAN=` (vazio).
+
+### Variáveis “travadas” (ex.: `POP_PORT`)
+
+O Coolify **importa automaticamente** todo `${NOME}` que aparece no `docker-compose.yml` (portas SMTP/IMAP/POP, `DBPASS`, `TZ`, etc.). Por isso aparece o erro:
+
+> Cannot delete environment variable 'POP_PORT'. Please remove it from the Docker Compose file first.
+
+**Isso é normal.** Não tente apagar `POP_PORT`, `IMAP_PORT`, `SMTP_PORT` e similares na UI.
+
+- Deixe essas entradas como estão **ou** preencha com o padrão (`POP_PORT=110`, `POPS_PORT=995`).
+- A configuração real do mailcow fica em **`mailcow.conf`** (criado pelo `deploy/coolify-start.sh` na VPS).
+- No Environment do Coolify, configure só o que está em `deploy/coolify.env.example` (`MAILCOW_HOSTNAME`, `TZ`, …). **Não** duplique de propósito portas/segredos que já vêm do compose.
 
 ## O que os scripts fazem
 
