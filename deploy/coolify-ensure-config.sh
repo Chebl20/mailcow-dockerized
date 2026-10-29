@@ -3,7 +3,17 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-cd "$ROOT"
+
+coolify_persistent_root() {
+  if [ -n "${COOLIFY_RESOURCE_UUID:-}" ] && [ -d "/data/coolify/applications/${COOLIFY_RESOURCE_UUID}" ]; then
+    echo "/data/coolify/applications/${COOLIFY_RESOURCE_UUID}"
+  fi
+}
+
+# Coolify bind-mounts use the persistent app dir, not only /artifacts during build.
+PERSIST_ROOT="$(coolify_persistent_root || true)"
+WORK_ROOT="${PERSIST_ROOT:-$ROOT}"
+cd "$WORK_ROOT"
 
 MAILCOW_HOSTNAME="${MAILCOW_HOSTNAME:-mail.sowtech.io}"
 MAILCOW_TZ="${TZ:-${MAILCOW_TZ:-America/Sao_Paulo}}"
@@ -14,7 +24,11 @@ COMPOSE_PROJECT_NAME="${COMPOSE_PROJECT_NAME:-mailcowdockerized}"
 
 random_alnum() {
   local len="${1:-28}"
-  LC_ALL=C tr -dc 'A-Za-z0-9' </dev/urandom 2>/dev/null | head -c "$len"
+  # head closes the pipe early; with pipefail that yields exit 141 (SIGPIPE).
+  (
+    set +o pipefail
+    LC_ALL=C tr -dc 'A-Za-z0-9' </dev/urandom 2>/dev/null | head -c "$len"
+  )
 }
 
 ensure_placeholder_files() {
@@ -24,21 +38,30 @@ ensure_placeholder_files() {
 }
 
 # SOGo bind-mounts expect files; if missing, Docker creates directories and the stack fails.
-ensure_sogo_custom_assets() {
+ensure_sogo_custom_assets_in() {
+  local base="$1"
   local defaults="${ROOT}/deploy/sogo-defaults"
   local names=(custom-shortlogo.svg custom-fulllogo.svg custom-fulllogo.png)
-  mkdir -p data/conf/sogo
+  [ -d "$base" ] || return 0
+  mkdir -p "${base}/data/conf/sogo"
   for name in "${names[@]}"; do
-    local dest="data/conf/sogo/${name}"
+    local dest="${base}/data/conf/sogo/${name}"
     if [ -d "$dest" ]; then
       echo "Removing mistaken directory ${dest} (SOGo needs a file mount)..."
       rm -rf "$dest"
     fi
     if [ ! -f "$dest" ] && [ -f "${defaults}/${name}" ]; then
       cp "${defaults}/${name}" "$dest"
-      echo "Installed SOGo asset ${name}"
+      echo "Installed SOGo asset ${dest}"
     fi
   done
+}
+
+ensure_sogo_custom_assets() {
+  ensure_sogo_custom_assets_in "$WORK_ROOT"
+  if [ "$ROOT" != "$WORK_ROOT" ]; then
+    ensure_sogo_custom_assets_in "$ROOT"
+  fi
 }
 
 ensure_snake_oil_certs() {
@@ -181,7 +204,8 @@ write_app_info
 
 # Coolify default compose uses .env in artifacts — mirror mailcow.conf when present.
 if [ -f mailcow.conf ]; then
-  cp -f mailcow.conf .env
+  cp -f mailcow.conf "${ROOT}/.env"
+  cp -f mailcow.conf .env 2>/dev/null || true
 fi
 
 # Optional: apply non-secret overrides from Coolify env on every deploy
